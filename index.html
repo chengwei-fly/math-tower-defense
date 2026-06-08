@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>数塔防线 - 数学就是战斗力</title>
+  <script type="module" crossorigin src="./assets/index-epzUZI0f.js"></script>
+  <link rel="stylesheet" crossorigin href="./assets/index-OQNytj2_.css">
+</head>
+<body>
+  <!-- 游戏容器 -->
+  <div id="game-container"></div>
+
+  <!-- 答题弹窗覆盖层 -->
+  <div id="quiz-overlay" class="quiz-overlay hidden">
+    <div class="quiz-modal">
+      <h2 id="quiz-title" class="quiz-title">建造防御塔</h2>
+      <div id="quiz-question" class="quiz-question"></div>
+      <input type="number" id="quiz-input" class="quiz-input" placeholder="输入答案..." />
+      <div id="quiz-timer" class="quiz-timer"></div>
+      <div class="quiz-buttons">
+        <button id="quiz-submit" class="quiz-btn quiz-btn-primary">提交答案</button>
+        <button id="quiz-cancel" class="quiz-btn quiz-btn-secondary">放弃</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 紧急答题覆盖层（基地危机） -->
+  <div id="emergency-overlay" class="emergency-overlay hidden">
+    <div class="emergency-modal">
+      <div class="emergency-header">
+        <span class="emergency-icon">🚨</span>
+        <h2 class="emergency-title">基地危机！</h2>
+        <p class="emergency-subtitle">紧急答题激活基地防御炮</p>
+      </div>
+      <div id="emergency-question" class="emergency-question"></div>
+      <input type="number" id="emergency-input" class="emergency-input" placeholder="输入答案..." />
+      <div id="emergency-timer" class="emergency-timer"></div>
+      <button id="emergency-submit" class="emergency-btn">提交答案</button>
+    </div>
+  </div>
+
+</body>
+</html>
