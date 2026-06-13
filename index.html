@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>算力防线 - 数学塔防</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #1a1a2e;
+      overflow: hidden;
+      font-family: 'Microsoft YaHei', sans-serif;
+      user-select: none;
+    }
+    /* 上下整体布局：HUD 顶部 / 舞台 = canvas + 塔条 上下 / 其他浮层 */
+    #game-stage {
+      position: fixed;
+      top: 40px;          /* HUD 高度 = 40px */
+      left: 0;
+      right: 0;
+      bottom: 64px;       /* 塔条高度 = 64px */
+      overflow: hidden;
+    }
+    #game-container {
+      width: 100%;
+      height: 100%;
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #1a1a2e;
+    }
+    canvas { display: block; position: relative; z-index: 1; }
+
+    #tower-tray {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 64px;       /* 固定高度 64px */
+      background: linear-gradient(180deg, rgba(15,15,30,0.6) 0%, rgba(15,15,30,0.95) 100%);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-top: 1px solid rgba(155, 89, 182, 0.4);
+      padding: 6px 12px;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.4);
+    }
+    /* 移除 tray-title 占用空间，改为左上角小标识 */
+    .tray-title {
+      display: none;       /* 隐藏标题，节省空间 */
+    }
+    .tray-hint { display: none; }
+    .tray-cards {
+      display: flex;
+      gap: 6px;
+      flex: 1;
+      overflow-x: auto;
+      justify-content: center;  /* 居中 */
+    }
+    .tray-card {
+      background: linear-gradient(135deg, #2c3e50 0%, #1a2530 100%);
+      border: 2px solid #555;
+      border-radius: 8px;
+      padding: 4px 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+      min-width: 60px;
+      max-width: 70px;
+      user-select: none;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .tray-card:hover { transform: translateY(-2px); }
+    .tray-card.selected {
+      border-color: #f1c40f;
+      box-shadow: 0 0 12px rgba(241, 196, 15, 0.6);
+      transform: translateY(-3px);
+    }
+    .tray-card.cant-afford { opacity: 0.4; cursor: not-allowed; }
+    .tray-card .ic { font-size: 20px; line-height: 1; }
+    .tray-card .nm { font-size: 10px; color: #fff; margin-top: 1px; font-weight: bold; white-space: nowrap; }
+    .tray-card .cs { font-size: 9px; color: #ffd700; margin-top: 0; }
+    .tray-tip {
+      font-size: 10px;
+      color: #aaa;
+      background: rgba(0,0,0,0.4);
+      padding: 3px 6px;
+      border-radius: 8px;
+      white-space: nowrap;
+      max-width: 80px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .tray-tip.active { color: #f1c40f; border: 1px solid #f1c40f; }
+
+    #debug-overlay { display: none; }
+
+    @media (max-width: 850px) {
+      /* 平板：HUD/塔条略小 */
+      .tray-card { min-width: 56px; padding: 4px 6px; }
+      .tray-card .ic { font-size: 18px; }
+      .tray-card .nm { font-size: 10px; }
+      .tray-card .cs { font-size: 9px; }
+      .stat { padding: 3px 8px; }
+      .restart-btn { padding: 14px 30px; font-size: 18px; }
+      #gameover-screen h1 { font-size: 32px; }
+      .stats { font-size: 18px; }
+      #battle-poster { padding: 20px 30px !important; }
+      #poster-headline { font-size: 28px !important; }
+      #poster-percent { font-size: 18px !important; }
+      #tower-roster { top: 46px; right: 6px; min-width: 100px; font-size: 11px; }
+      #question-panel { padding: 14px 10px !important; }
+      .question-text { font-size: 18px !important; }
+      .option-btn { padding: 10px 12px !important; font-size: 14px !important; }
+      #overload-btn { bottom: 75px !important; right: 8px !important; padding: 8px 14px !important; font-size: 12px !important; }
+    }
+
+    @media (max-width: 480px) {
+      /* 手机竖屏：极限压缩 */
+      #hud { height: 36px; padding: 0 6px; gap: 4px; }
+      .stat { padding: 2px 6px; font-size: 10px; }
+      #tower-tray { height: 56px; padding: 4px 6px; gap: 4px; }
+      .tray-card { min-width: 48px; max-width: 56px; padding: 3px 4px; }
+      .tray-card .ic { font-size: 16px; }
+      .tray-card .nm { font-size: 9px; }
+      .tray-card .cs { font-size: 8px; }
+      .tray-tip { display: none !important; }     /* 隐藏右侧 tip，5 张卡铺满 */
+      #tower-roster { top: 42px; min-width: 80px; font-size: 9px; padding: 2px 4px; }
+      #question-panel { padding: 10px 8px !important; }
+      .question-text { font-size: 16px !important; }
+      .option-btn { padding: 8px 10px !important; font-size: 13px !important; }
+      #overload-btn { bottom: 68px !important; right: 6px !important; padding: 6px 10px !important; font-size: 11px !important; }
+      #overload-btn { width: 44px; height: 44px; border-radius: 50%; }   /* 圆形按钮 */
+    }
+
+    @media (max-width: 360px) {
+      /* iPhone SE / 5s 等小屏 */
+      .tray-card { min-width: 42px; max-width: 50px; padding: 2px 3px; }
+      .tray-card .ic { font-size: 14px; }
+      .tray-card .nm { display: none; }     /* 隐藏名字，只显示图标+价格 */
+      #hud { height: 34px; }
+      #tower-tray { height: 50px; }
+    }
+
+    @media (max-height: 500px) and (orientation: landscape) {
+      /* 手机横屏：极窄 */
+      #hud { height: 32px; font-size: 10px; }
+      .stat { padding: 2px 6px; }
+      #game-stage { top: 32px; bottom: 54px; }
+      #tower-tray { height: 54px; padding: 4px 8px; }
+      .tray-card { min-width: 50px; padding: 3px 4px; }
+      .tray-card .ic { font-size: 16px; }
+      .tray-card .nm { font-size: 9px; }
+      #question-panel { padding: 8px 12px !important; }
+      .question-text { font-size: 16px !important; margin-bottom: 6px !important; }
+      .option-btn { padding: 8px 12px !important; font-size: 13px !important; min-height: 36px !important; }
+      .options { gap: 6px !important; }
+      #tower-roster { display: none; }    /* 横屏隐藏已建塔面板节省空间 */
+    }
+
+    @media (pointer: coarse) {
+      /* 触摸设备：按钮更大 */
+      .option-btn { min-height: 44px; }
+      .tray-card { min-height: 50px; }
+    }
+
+    #hud {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 40px;       /* 固定 40px 高 */
+      padding: 0 10px;
+      display: flex;
+      justify-content: flex-start;
+      align-items: center;
+      z-index: 50;
+      pointer-events: none;
+      gap: 6px;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      background: linear-gradient(180deg, rgba(15,15,30,0.85) 0%, rgba(15,15,30,0.4) 100%);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+    .stat {
+      background: rgba(0, 0, 0, 0.75);
+      padding: 4px 10px;
+      border-radius: 6px;
+      color: #fff;
+      font-size: 12px;
+      border: 1px solid rgba(255,255,255,0.15);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .stat.stardust { color: #ffd700; }
+    .stat.magic { color: #b39ddb; }
+    .stat.life { color: #ff5252; }
+    .stat.wave { color: #64b5f6; }
+    .stat.difficulty { color: #81c784; font-size: 13px; }
+
+    #question-panel {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(15, 15, 30, 0.92);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      padding: 20px;
+      transform: translateY(100%);
+      transition: transform 0.3s ease;
+      z-index: 100;
+      border-top: 2px solid rgba(155, 89, 182, 0.5);
+      position: fixed;
+    }
+    #question-panel.show {
+      transform: translateY(0);
+    }
+    .question-text {
+      font-size: 32px;
+      color: #fff;
+      text-align: center;
+      margin-bottom: 18px;
+      font-weight: bold;
+    }
+    .options {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      flex-wrap: wrap;
+    }
+    .option-btn {
+      padding: 14px 28px;
+      min-width: 80px;
+      font-size: 22px;
+      font-weight: bold;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.1s;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    }
+    .option-btn:hover:not(:disabled) {
+      transform: scale(1.05);
+      box-shadow: 0 6px 16px rgba(155, 89, 182, 0.5);
+    }
+    .option-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    #question-panel.shake { animation: shake 0.4s ease; }
+    @keyframes shake {
+      0%, 100% { transform: translateX(0); }
+      20% { transform: translateX(-12px); }
+      40% { transform: translateX(12px); }
+      60% { transform: translateX(-8px); }
+      80% { transform: translateX(8px); }
+    }
+
+    #tower-select-panel {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(15, 15, 30, 0.96);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 2px solid rgba(155, 89, 182, 0.5);
+      border-radius: 16px;
+      padding: 24px 30px;
+      color: #fff;
+      z-index: 90;
+      display: none;
+      min-width: 580px;
+      box-shadow: 0 0 40px rgba(155, 89, 182, 0.4);
+    }
+    #tower-select-panel.show { display: block; animation: panelIn 0.3s ease; }
+    .tsp-title { font-size: 22px; font-weight: bold; color: #b39ddb; text-align: center; margin-bottom: 6px; }
+    .tsp-hint { font-size: 12px; color: #888; text-align: center; margin-bottom: 16px; }
+    .tsp-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    .tsp-card {
+      background: linear-gradient(135deg, #2c3e50 0%, #1a2530 100%);
+      border: 2px solid;
+      border-radius: 12px;
+      padding: 14px 10px;
+      cursor: pointer;
+      transition: transform 0.2s;
+      text-align: center;
+      position: relative;
+    }
+    .tsp-card:hover { transform: translateY(-4px) scale(1.03); box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
+    .tsp-card.cant-afford { opacity: 0.4; cursor: not-allowed; }
+    .tsp-card.cant-afford:hover { transform: none; box-shadow: none; }
+    .tsp-card .ic { font-size: 36px; margin-bottom: 4px; }
+    .tsp-card .nm { font-size: 13px; font-weight: bold; color: #fff; margin-bottom: 2px; }
+    .tsp-card .ds { font-size: 11px; color: #aaa; margin-bottom: 6px; }
+    .tsp-card .cs { font-size: 14px; font-weight: bold; color: #ffd700; }
+    .tsp-close {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: rgba(255, 82, 82, 0.2);
+      border: 1px solid #ff5252;
+      color: #ff8a80;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      line-height: 1;
+    }
+    .tsp-close:hover { background: rgba(255, 82, 82, 0.4); }
+
+    #upgrade-panel {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.95);
+      padding: 30px;
+      border-radius: 15px;
+      z-index: 200;
+      display: none;
+      border: 2px solid #9b59b6;
+      box-shadow: 0 0 40px rgba(155, 89, 182, 0.4);
+      pointer-events: auto;
+    }
+    #upgrade-panel.show { display: block; }
+    #upgrade-panel h3 {
+      color: #fff;
+      margin-bottom: 20px;
+      text-align: center;
+      font-size: 20px;
+    }
+    .tower-option {
+      display: flex;
+      gap: 15px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .tower-btn {
+      padding: 18px 20px;
+      background: #2c3e50;
+      border: 2px solid #fff;
+      border-radius: 10px;
+      color: #fff;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s;
+      min-width: 100px;
+    }
+    .tower-btn:hover { background: #34495e; transform: translateY(-2px); }
+    .tower-btn .icon { font-size: 30px; }
+    .tower-btn .cost { color: #b39ddb; font-size: 12px; margin-top: 5px; }
+
+    #card-panel {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.95);
+      padding: 35px;
+      border-radius: 20px;
+      z-index: 90;
+      display: none;
+      border: 2px solid #f1c40f;
+      box-shadow: 0 0 60px rgba(241, 196, 15, 0.4);
+    }
+    #card-panel.show { display: block; }
+    #card-panel h3 {
+      color: #f1c40f;
+      text-align: center;
+      margin-bottom: 25px;
+      font-size: 22px;
+    }
+    .cards {
+      display: flex;
+      gap: 20px;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    .card {
+      width: 120px;
+      height: 160px;
+      background: linear-gradient(135deg, #1e3c72 0%, #2a5296 100%);
+      border: 3px solid #f1c40f;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      color: #fff;
+      cursor: pointer;
+      transition: transform 0.2s;
+    }
+    .card:hover { transform: scale(1.1) rotate(2deg); }
+    .card .icon { font-size: 44px; margin-bottom: 10px; }
+    .card .name { font-size: 14px; text-align: center; }
+
+    #tower-roster {
+      position: fixed;
+      top: 46px;       /* HUD 下方 */
+      right: 6px;
+      background: rgba(15, 15, 30, 0.85);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(155, 89, 182, 0.3);
+      border-radius: 6px;
+      padding: 4px 6px;
+      color: #fff;
+      font-size: 10px;
+      z-index: 50;
+      min-width: 90px;
+      max-width: 140px;
+      transition: max-height 0.3s ease, padding 0.3s ease;
+      max-height: 36px;       /* 默认只显示 36px = 收起 */
+      overflow: hidden;
+    }
+    #tower-roster.expanded {
+      max-height: 280px;
+      padding: 6px 8px;
+    }
+    #tower-roster:not(.expanded) .roster-body { display: none; }
+    .roster-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      user-select: none;
+      height: 24px;
+    }
+    .roster-title { font-size: 11px; color: #b39ddb; font-weight: bold; }
+    .roster-toggle {
+      font-size: 11px;
+      color: #888;
+      transition: transform 0.3s ease;
+      display: inline-block;
+    }
+    #tower-roster.collapsed .roster-toggle { transform: rotate(-90deg); }
+    .roster-item { display: flex; align-items: center; gap: 4px; padding: 1px 0; font-size: 10px; }
+    .roster-item .ic { font-size: 16px; }
+    .roster-item .lbl { color: #ddd; flex: 1; }
+    .roster-item .ct { color: #ffd700; font-weight: bold; }
+
+    #overload-btn {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      padding: 14px 24px;
+      background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+      z-index: 70;
+      display: none;
+      animation: pulse 1s infinite;
+      box-shadow: 0 0 20px rgba(231, 76, 60, 0.6);
+    }
+    #overload-btn.show { display: block; }
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.08); }
+    }
+
+    #gameover-screen {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.95);
+      z-index: 200;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      flex-direction: column;
+    }
+    #gameover-screen.show { display: flex; }
+    #gameover-screen h1 {
+      color: #e74c3c;
+      font-size: 48px;
+      margin-bottom: 30px;
+      text-shadow: 0 0 20px rgba(231, 76, 60, 0.6);
+    }
+    .stats { color: #fff; font-size: 22px; margin-bottom: 30px; text-align: center; }
+    .stats p { margin: 10px 0; }
+    .stats span { color: #f1c40f; font-weight: bold; }
+    .restart-btn {
+      padding: 18px 40px;
+      background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 20px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .restart-btn:hover { transform: scale(1.05); }
+
+    .toast {
+      position: fixed;
+      top: 30%;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.85);
+      color: #f1c40f;
+      padding: 15px 30px;
+      border-radius: 10px;
+      font-size: 22px;
+      font-weight: bold;
+      z-index: 150;
+      border: 2px solid #f1c40f;
+    }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div class="stat stardust">⭐ 星尘: <span id="stardust-value">30</span></div>
+    <div class="stat magic">✨ 魔能: <span id="magic-value">0</span></div>
+    <div class="stat wave">🌊 波次: <span id="wave-value">0</span></div>
+    <div class="stat life">❤️ 基地: <span id="life-value">20</span></div>
+    <div class="stat difficulty">📚 <span id="difficulty-value">入门</span></div>
+  </div>
+
+  <div id="game-stage">
+    <div id="game-container"></div>
+    <div id="tower-tray">
+      <div class="tray-title">🏗️ 塔工厂 <span class="tray-hint" id="tray-hint">点击下方塔型，再点空地建塔</span></div>
+      <div class="tray-cards" id="tray-cards"></div>
+      <div class="tray-tip" id="tray-tip">未选中</div>
+    </div>
+  </div>
+
+  <div id="tower-roster">
+    <div class="roster-header" id="roster-header">
+      <div class="roster-title">已建塔 <span id="tower-count">0</span></div>
+      <span class="roster-toggle" id="roster-toggle">▼</span>
+    </div>
+    <div class="roster-body" id="roster-body">
+      <div id="tower-list"></div>
+    </div>
+  </div>
+
+  <div id="question-panel">
+    <div class="question-text" id="question-text">12 + 8 = ?</div>
+    <div class="options" id="options-container"></div>
+  </div>
+
+  <div id="tower-select-panel" style="display:none">
+    <div class="tsp-title">🏗️ 选择塔类型</div>
+    <div class="tsp-hint">点击下方卡片选择，点击右上角关闭</div>
+    <div class="tsp-grid" id="tsp-grid"></div>
+    <button class="tsp-close" id="tsp-close">✖</button>
+  </div>
+
+  <div id="upgrade-panel" style="display:none">
+    <h3>选择升级方向</h3>
+    <div class="tower-option">
+      <div class="tower-btn" data-type="ice">
+        <div class="icon">❄️</div>
+        <div>冰冻塔</div>
+        <div class="cost">20 魔能</div>
+      </div>
+      <div class="tower-btn" data-type="fire">
+        <div class="icon">🔥</div>
+        <div>火炮塔</div>
+        <div class="cost">25 魔能</div>
+      </div>
+      <div class="tower-btn" data-type="sniper">
+        <div class="icon">🎯</div>
+        <div>狙击塔</div>
+        <div class="cost">30 魔能</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="card-panel" style="display:none">
+    <h3>🎁 战术补给箱</h3>
+    <div class="cards" id="cards-container"></div>
+  </div>
+
+  <button id="overload-btn">⚡ 紧急超载</button>
+
+  <div id="gameover-screen">
+    <h1>💥 防线崩溃</h1>
+    <div class="stats">
+      <p>📚 共答对: <span id="correct-count">0</span> 题</p>
+      <p>🌊 存活波次: <span id="survive-waves">0</span> 波</p>
+      <p>💀 击杀怪物: <span id="kill-count">0</span> 只</p>
+      <p>🔥 最高连击: <span id="max-combo">0</span></p>
+      <p>✨ 累计魔能: <span id="total-magic">0</span></p>
+    </div>
+    <div id="battle-poster" style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);padding:30px 50px;border-radius:20px;color:#fff;text-align:center;box-shadow:0 10px 50px rgba(102,126,234,0.5);max-width:90%;margin:20px 0;">
+      <div style="font-size:18px;opacity:0.9;">⚡ 算力防线 · 战报 ⚡</div>
+      <div id="poster-headline" style="font-size:42px;font-weight:bold;margin:15px 0;text-shadow:0 2px 10px rgba(0,0,0,0.3);">今日动用算力 0</div>
+      <div id="poster-percent" style="font-size:24px;color:#ffd700;">击败 0% 同龄人</div>
+      <div style="font-size:14px;margin-top:15px;opacity:0.8;">扫码来战 → 微信内打开</div>
+    </div>
+    <button class="restart-btn" id="restart-btn">🔄 重新开始</button>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+  <script src="game.js?v=31"></script>
+</body>
+</html>
