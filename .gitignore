@@ -1,0 +1,14 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+.vite/
+*.log
+debug.log
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+.DS_Store
